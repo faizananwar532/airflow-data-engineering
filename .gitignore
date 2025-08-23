@@ -1,0 +1,5 @@
+*.tfvars
+.terraform*
+
+mysql-values.yaml
+mysql-github-values.yaml
