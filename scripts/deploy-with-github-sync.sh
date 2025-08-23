@@ -3,6 +3,9 @@
 set -e
 
 echo "===== Deploy Airflow with GitHub Sync ====="
+echo "Usage: Run this script from the project root directory"
+echo "Example: ./scripts/deploy-with-github-sync.sh"
+echo ""
 
 # Colors for output
 RED='\033[0;31m'
@@ -39,12 +42,12 @@ if [ -z "$AWS_ACCESS_KEY" ] || [ -z "$AWS_SECRET_KEY" ]; then
 fi
 
 # Check if we're in the right directory
-if [ ! -f "../airflow-1.15/mysql-github-values.yaml" ]; then
-    print_error "Please run this script from the scripts directory"
+if [ ! -f "airflow-1.15/mysql-github-values.yaml" ]; then
+    print_error "Please run this script from the project root directory"
     exit 1
 fi
 
-cd ..
+# We're already in the right directory, no need to cd
 
 print_info "This script will deploy Airflow with GitHub sync using your AWS credentials"
 print_warning "AWS credentials will be set via environment variables, not stored in files"
@@ -149,7 +152,7 @@ if [ "$DEPLOYMENT_TYPE" = "install" ]; then
     
     if [ -n "$WEBSERVER_POD" ]; then
         # Copy and execute the connection script
-        kubectl cp add_mysql_connection.py "airflow/$WEBSERVER_POD:/tmp/add_mysql_connection.py" -c webserver
+        kubectl cp scripts/add_mysql_connection.py "airflow/$WEBSERVER_POD:/tmp/add_mysql_connection.py" -c webserver
         kubectl exec -n airflow $WEBSERVER_POD -c webserver -- chmod +x /tmp/add_mysql_connection.py
         kubectl exec -n airflow $WEBSERVER_POD -c webserver -- python /tmp/add_mysql_connection.py
         print_status "MySQL connection added"
