@@ -1,0 +1,79 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: airflow-gitops
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: airflow
+    app.kubernetes.io/component: application
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/faizananwar532/airflow-data-engineering.git
+    targetRevision: HEAD
+    path: airflow-1.15
+    helm:
+      valueFiles:
+        - mysql-github-values-public.yaml
+      parameters:
+        # Deployment sizing
+        - name: scheduler.replicas
+          value: "1"
+        - name: webserver.replicas
+          value: "1"
+        - name: workers.replicas
+          value: "1"
+        
+        # Sensitive values - REPLACE THESE WITH ACTUAL VALUES BEFORE DEPLOYMENT
+        # Use configure-sensitive-values.sh to generate a secure version
+        - name: env[0].value
+          value: "PLACEHOLDER_MYSQL_CONNECTION"
+        - name: env[1].value
+          value: "PLACEHOLDER_MYSQL_DEFAULT_CONNECTION"
+        
+        # AWS credentials - REPLACE WITH ACTUAL VALUES
+        - name: env[3].value
+          value: "PLACEHOLDER_AWS_ACCESS_KEY_ID"
+        - name: env[4].value
+          value: "PLACEHOLDER_AWS_SECRET_ACCESS_KEY"
+        
+        # S3 log bucket - REPLACE WITH ACTUAL BUCKET
+        - name: env[7].value
+          value: "PLACEHOLDER_S3_LOG_BUCKET"
+        - name: config.logging.remote_base_log_folder
+          value: "PLACEHOLDER_S3_LOG_BUCKET"
+        
+        # Fernet key - REPLACE WITH ACTUAL KEY
+        - name: env[9].value
+          value: "PLACEHOLDER_FERNET_KEY"
+        - name: config.core.fernet_key
+          value: "PLACEHOLDER_FERNET_KEY"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: airflow
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10
+  info:
+    - name: Description
+      value: "GitOps managed Airflow deployment with automatic DAG synchronization"
+    - name: Repository
+      value: "https://github.com/faizananwar532/airflow-data-engineering"
+    - name: Sync Method
+      value: "GitHub Direct Sync with ArgoCD GitOps"

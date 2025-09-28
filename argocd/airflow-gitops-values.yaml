@@ -1,0 +1,70 @@
+# ArgoCD-specific Helm values for Airflow GitOps deployment
+# This file extends mysql-github-values.yaml with ArgoCD-specific configurations
+
+# Override specific settings for GitOps deployment
+scheduler:
+  replicas: 1
+  # Reduce resource requests for GitOps efficiency
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+webserver:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+workers:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+# GitOps-specific annotations
+commonAnnotations:
+  argocd.argoproj.io/sync-wave: "1"
+  argocd.argoproj.io/managed: "true"
+
+# Enhanced monitoring for GitOps
+serviceMonitor:
+  enabled: false  # Set to true if you have Prometheus operator
+
+# ArgoCD-friendly configuration
+config:
+  # Ensure ArgoCD can manage the deployment properly
+  core:
+    # Faster DAG processing for GitOps
+    dag_file_processor_timeout: 50
+    dagbag_import_timeout: 30
+    # Enhanced logging for GitOps monitoring
+    logging_level: INFO
+  
+  webserver:
+    # Enable configuration exposure for ArgoCD monitoring
+    expose_config: true
+    expose_hostname: true
+    expose_stacktrace: true
+    # RBAC for better security with GitOps
+    rbac: true
+
+# ArgoCD health checks
+healthCheck:
+  enabled: true
+  
+# Ensure proper cleanup during ArgoCD sync
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1

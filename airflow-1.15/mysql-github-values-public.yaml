@@ -1,0 +1,455 @@
+# Public Airflow Helm values - NO SENSITIVE DATA
+# This file is safe to commit to Git
+# Sensitive values are injected via ArgoCD Application parameters
+
+# Disable the built-in PostgreSQL
+postgresql:
+  enabled: false
+
+# Configure Airflow to use MySQL via secrets
+data:
+  # Use the secrets we created for metadata and result backend
+  metadataSecretName: airflow-mysql-metadata
+  resultBackendSecretName: airflow-mysql-result-backend
+  
+  # Empty connection configs since we're using secrets
+  metadataConnection:
+    user: ""
+    pass: ""
+    protocol: ""
+    host: ""
+    port: 0
+    db: ""
+    sslmode: disable
+  resultBackendConnection:
+    user: ""
+    pass: ""
+    protocol: ""
+    host: ""
+    port: 0
+    db: ""
+    sslmode: disable
+
+# Environment variables - sensitive values will be overridden by ArgoCD
+env:
+  # MySQL connection for DAGs to use (will be overridden)
+  - name: AIRFLOW_CONN_MYSQL
+    value: "PLACEHOLDER_MYSQL_CONNECTION"
+  # Default MySQL connection (will be overridden)
+  - name: AIRFLOW_CONN_MYSQL_DEFAULT
+    value: "PLACEHOLDER_MYSQL_DEFAULT_CONNECTION"
+  # S3 connection for logs
+  - name: AIRFLOW_CONN_S3_BUCKET
+    value: "s3://:@?"
+  # AWS credentials (will be overridden)
+  - name: AWS_ACCESS_KEY_ID
+    value: "PLACEHOLDER_AWS_ACCESS_KEY_ID"
+  - name: AWS_SECRET_ACCESS_KEY
+    value: "PLACEHOLDER_AWS_SECRET_ACCESS_KEY"
+  - name: AWS_DEFAULT_REGION
+    value: "us-east-1"
+  # Configure local DAGs folder (not S3 directly)
+  - name: AIRFLOW__CORE__DAGS_FOLDER
+    value: "/opt/airflow/dags"
+  # Configure S3 for logs (bucket name will be overridden)
+  - name: AIRFLOW__LOGGING__REMOTE_LOGGING
+    value: "True"
+  - name: AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER
+    value: "PLACEHOLDER_S3_LOG_BUCKET"
+  - name: AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID
+    value: "s3_bucket"
+  # Add Fernet key configuration (will be overridden)
+  - name: AIRFLOW__CORE__FERNET_KEY
+    value: "PLACEHOLDER_FERNET_KEY"
+  # Enable connections UI
+  - name: AIRFLOW__WEBSERVER__EXPOSE_CONFIG
+    value: "False"
+  - name: AIRFLOW__WEBSERVER__EXPOSE_HOSTNAME
+    value: "False"
+  - name: AIRFLOW__WEBSERVER__EXPOSE_STACKTRACE
+    value: "False"
+  - name: AIRFLOW__CORE__STORE_SERIALIZED_DAGS
+    value: "True"
+  - name: AIRFLOW__CORE__STORE_DAG_CODE
+    value: "True"
+  # UI configuration
+  - name: AIRFLOW__WEBSERVER__NAVBAR_COLOR
+    value: "#007A87"
+  - name: AIRFLOW__WEBSERVER__HIDE_PAUSED_DAGS_BY_DEFAULT
+    value: "True"
+  - name: AIRFLOW__WEBSERVER__RBAC
+    value: "True"
+  # Authentication configuration
+  - name: AIRFLOW__API__AUTH_BACKENDS
+    value: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+  - name: AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX
+    value: "True"
+  # GitHub repository configuration
+  - name: GIT_REPO_URL
+    value: "https://github.com/faizananwar532/airflow-data-engineering.git"
+  - name: GIT_BRANCH
+    value: "main"
+  - name: GIT_SYNC_INTERVAL
+    value: "60"  # seconds
+
+# Install additional Python packages
+extraPipPackages:
+  - "mysql-connector-python==9.0.0"
+  - "apache-airflow-providers-amazon==8.0.0"
+  - "watchtower==2.0.1"
+  - "s3fs>=2023.10.0"
+  - "pandas>=1.3.0"
+  - "cryptography>=3.0.0"
+
+# Configure Airflow to use local DAGs folder
+config:
+  core:
+    dags_folder: "/opt/airflow/dags"
+    fernet_key: "PLACEHOLDER_FERNET_KEY"
+    store_serialized_dags: "True"
+    store_dag_code: "True"
+  logging:
+    remote_logging: "True"
+    remote_base_log_folder: "PLACEHOLDER_S3_LOG_BUCKET"
+    remote_log_conn_id: "s3_bucket"
+  webserver:
+    expose_config: "False"
+    expose_hostname: "False"
+    expose_stacktrace: "False"
+    navbar_color: "#007A87"
+    hide_paused_dags_by_default: "True"
+    rbac: "True"
+    enable_proxy_fix: "True"
+  api:
+    auth_backends: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+
+# Add GitHub sync sidecar containers
+scheduler:
+  # Add volume mount to scheduler container
+  extraVolumeMounts:
+    - name: dags-volume
+      mountPath: /opt/airflow/dags
+      readOnly: false
+    - name: advanced-test-dag-volume
+      mountPath: /opt/airflow/dags/dag_advanced_test.py
+      subPath: dag_advanced_test.py
+      readOnly: true
+
+  extraInitContainers:
+    - name: dags-git-init-sync
+      image: alpine/git:2.40.1
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: GIT_REPO_URL
+          value: "https://github.com/faizananwar532/airflow-data-engineering.git"
+        - name: GIT_BRANCH
+          value: "main"
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Initializing Git sync for DAGs..."
+          mkdir -p /opt/airflow/dags
+          cd /opt/airflow
+          
+          # Clone the repository
+          echo "Cloning repository: $GIT_REPO_URL"
+          git clone --depth 1 --branch $GIT_BRANCH $GIT_REPO_URL repo
+          
+          # Copy DAGs from repository to dags folder
+          if [ -d "repo/dags" ]; then
+            echo "Copying DAGs from repository..."
+            cp -r repo/dags/* /opt/airflow/dags/ 2>/dev/null || echo "No DAG files to copy"
+          else
+            echo "No dags directory found in repository"
+          fi
+          
+          # Clean up
+          rm -rf repo
+          
+          echo "Files in /opt/airflow/dags:"
+          ls -la /opt/airflow/dags/
+          echo "Git init sync completed"
+      volumeMounts:
+        - name: dags-volume
+          mountPath: /opt/airflow/dags
+  
+  # Sidecar container to regularly sync DAGs from GitHub
+  extraContainers:
+    - name: dags-git-sync
+      image: alpine/git:2.40.1
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: GIT_REPO_URL
+          value: "https://github.com/faizananwar532/airflow-data-engineering.git"
+        - name: GIT_BRANCH
+          value: "main"
+        - name: GIT_SYNC_INTERVAL
+          value: "60"
+      command:
+        - /bin/sh
+        - -c
+        - |
+          while true; do
+            echo "$(date): Syncing DAGs from GitHub..."
+            cd /tmp
+            
+            # Clone the latest version
+            rm -rf repo
+            if git clone --depth 1 --branch $GIT_BRANCH $GIT_REPO_URL repo; then
+              echo "Repository cloned successfully"
+              
+              # Copy DAGs if they exist
+              if [ -d "repo/dags" ]; then
+                echo "Syncing DAGs..."
+                # Remove old DAGs (except advanced test DAG)
+                find /opt/airflow/dags -name "*.py" -not -name "dag_advanced_test.py" -delete 2>/dev/null || true
+                
+                # Copy new DAGs
+                cp repo/dags/*.py /opt/airflow/dags/ 2>/dev/null || echo "No Python DAG files found"
+                
+                echo "Current DAGs in folder:"
+                ls -la /opt/airflow/dags/
+              else
+                echo "No dags directory found in repository"
+              fi
+              
+              # Clean up
+              rm -rf repo
+            else
+              echo "Failed to clone repository"
+            fi
+            
+            echo "Sleeping for $GIT_SYNC_INTERVAL seconds..."
+            sleep $GIT_SYNC_INTERVAL
+          done
+      volumeMounts:
+        - name: dags-volume
+          mountPath: /opt/airflow/dags
+  
+  extraVolumes:
+    - name: dags-volume
+      emptyDir: {}
+    - name: advanced-test-dag-volume
+      configMap:
+        name: airflow-advanced-test-dag
+
+# Apply the same GitHub sync configuration to webserver
+webserver:
+  # Add volume mount to webserver container
+  extraVolumeMounts:
+    - name: dags-volume
+      mountPath: /opt/airflow/dags
+      readOnly: false
+    - name: advanced-test-dag-volume
+      mountPath: /opt/airflow/dags/dag_advanced_test.py
+      subPath: dag_advanced_test.py
+      readOnly: true
+
+  extraInitContainers:
+    - name: dags-git-init-sync
+      image: alpine/git:2.40.1
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: GIT_REPO_URL
+          value: "https://github.com/faizananwar532/airflow-data-engineering.git"
+        - name: GIT_BRANCH
+          value: "main"
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Initializing Git sync for DAGs..."
+          mkdir -p /opt/airflow/dags
+          cd /opt/airflow
+          
+          # Clone the repository
+          echo "Cloning repository: $GIT_REPO_URL"
+          git clone --depth 1 --branch $GIT_BRANCH $GIT_REPO_URL repo
+          
+          # Copy DAGs from repository to dags folder
+          if [ -d "repo/dags" ]; then
+            echo "Copying DAGs from repository..."
+            cp -r repo/dags/* /opt/airflow/dags/ 2>/dev/null || echo "No DAG files to copy"
+          else
+            echo "No dags directory found in repository"
+          fi
+          
+          # Clean up
+          rm -rf repo
+          
+          echo "Files in /opt/airflow/dags:"
+          ls -la /opt/airflow/dags/
+          echo "Git init sync completed"
+      volumeMounts:
+        - name: dags-volume
+          mountPath: /opt/airflow/dags
+  
+  extraContainers:
+    - name: dags-git-sync
+      image: alpine/git:2.40.1
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: GIT_REPO_URL
+          value: "https://github.com/faizananwar532/airflow-data-engineering.git"
+        - name: GIT_BRANCH
+          value: "main"
+        - name: GIT_SYNC_INTERVAL
+          value: "60"
+      command:
+        - /bin/sh
+        - -c
+        - |
+          while true; do
+            echo "$(date): Syncing DAGs from GitHub..."
+            cd /tmp
+            
+            # Clone the latest version
+            rm -rf repo
+            if git clone --depth 1 --branch $GIT_BRANCH $GIT_REPO_URL repo; then
+              echo "Repository cloned successfully"
+              
+              # Copy DAGs if they exist
+              if [ -d "repo/dags" ]; then
+                echo "Syncing DAGs..."
+                # Remove old DAGs (except advanced test DAG)
+                find /opt/airflow/dags -name "*.py" -not -name "dag_advanced_test.py" -delete 2>/dev/null || true
+                
+                # Copy new DAGs
+                cp repo/dags/*.py /opt/airflow/dags/ 2>/dev/null || echo "No Python DAG files found"
+                
+                echo "Current DAGs in folder:"
+                ls -la /opt/airflow/dags/
+              else
+                echo "No dags directory found in repository"
+              fi
+              
+              # Clean up
+              rm -rf repo
+            else
+              echo "Failed to clone repository"
+            fi
+            
+            echo "Sleeping for $GIT_SYNC_INTERVAL seconds..."
+            sleep $GIT_SYNC_INTERVAL
+          done
+      volumeMounts:
+        - name: dags-volume
+          mountPath: /opt/airflow/dags
+  
+  extraVolumes:
+    - name: dags-volume
+      emptyDir: {}
+    - name: advanced-test-dag-volume
+      configMap:
+        name: airflow-advanced-test-dag
+
+# Apply the same GitHub sync configuration to workers
+workers:
+  # Add volume mount to worker container
+  extraVolumeMounts:
+    - name: dags-volume
+      mountPath: /opt/airflow/dags
+      readOnly: false
+    - name: advanced-test-dag-volume
+      mountPath: /opt/airflow/dags/dag_advanced_test.py
+      subPath: dag_advanced_test.py
+      readOnly: true
+  
+  extraInitContainers:
+    - name: dags-git-init-sync
+      image: alpine/git:2.40.1
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: GIT_REPO_URL
+          value: "https://github.com/faizananwar532/airflow-data-engineering.git"
+        - name: GIT_BRANCH
+          value: "main"
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Initializing Git sync for DAGs..."
+          mkdir -p /opt/airflow/dags
+          cd /opt/airflow
+          
+          # Clone the repository
+          echo "Cloning repository: $GIT_REPO_URL"
+          git clone --depth 1 --branch $GIT_BRANCH $GIT_REPO_URL repo
+          
+          # Copy DAGs from repository to dags folder
+          if [ -d "repo/dags" ]; then
+            echo "Copying DAGs from repository..."
+            cp -r repo/dags/* /opt/airflow/dags/ 2>/dev/null || echo "No DAG files to copy"
+          else
+            echo "No dags directory found in repository"
+          fi
+          
+          # Clean up
+          rm -rf repo
+          
+          echo "Files in /opt/airflow/dags:"
+          ls -la /opt/airflow/dags/
+          echo "Git init sync completed"
+      volumeMounts:
+        - name: dags-volume
+          mountPath: /opt/airflow/dags
+  
+  extraContainers:
+    - name: dags-git-sync
+      image: alpine/git:2.40.1
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: GIT_REPO_URL
+          value: "https://github.com/faizananwar532/airflow-data-engineering.git"
+        - name: GIT_BRANCH
+          value: "main"
+        - name: GIT_SYNC_INTERVAL
+          value: "60"
+      command:
+        - /bin/sh
+        - -c
+        - |
+          while true; do
+            echo "$(date): Syncing DAGs from GitHub..."
+            cd /tmp
+            
+            # Clone the latest version
+            rm -rf repo
+            if git clone --depth 1 --branch $GIT_BRANCH $GIT_REPO_URL repo; then
+              echo "Repository cloned successfully"
+              
+              # Copy DAGs if they exist
+              if [ -d "repo/dags" ]; then
+                echo "Syncing DAGs..."
+                # Remove old DAGs (except advanced test DAG)
+                find /opt/airflow/dags -name "*.py" -not -name "dag_advanced_test.py" -delete 2>/dev/null || true
+                
+                # Copy new DAGs
+                cp repo/dags/*.py /opt/airflow/dags/ 2>/dev/null || echo "No Python DAG files found"
+                
+                echo "Current DAGs in folder:"
+                ls -la /opt/airflow/dags/
+              else
+                echo "No dags directory found in repository"
+              fi
+              
+              # Clean up
+              rm -rf repo
+            else
+              echo "Failed to clone repository"
+            fi
+            
+            echo "Sleeping for $GIT_SYNC_INTERVAL seconds..."
+            sleep $GIT_SYNC_INTERVAL
+          done
+      volumeMounts:
+        - name: dags-volume
+          mountPath: /opt/airflow/dags
+  
+  extraVolumes:
+    - name: dags-volume
+      emptyDir: {}
+    - name: advanced-test-dag-volume
+      configMap:
+        name: airflow-advanced-test-dag

@@ -1,5 +1,15 @@
 *.tfvars
 .terraform*
 
+# Sensitive Airflow configuration files
 mysql-values.yaml
 mysql-github-values.yaml
+
+# ArgoCD files with sensitive data
+airflow-application-with-secrets.yaml
+*-with-secrets.yaml
+
+# Temporary files with credentials
+*.tmp
+*.temp
+*-temp.yaml
