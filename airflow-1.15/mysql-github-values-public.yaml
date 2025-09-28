@@ -125,6 +125,15 @@ config:
 
 # Add GitHub sync sidecar containers
 scheduler:
+  # Resource limits to prevent OOMKilled
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  
   # Add volume mount to scheduler container
   extraVolumeMounts:
     - name: dags-volume
@@ -236,6 +245,15 @@ scheduler:
 
 # Apply the same GitHub sync configuration to webserver
 webserver:
+  # Resource limits to prevent OOMKilled
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  
   # Add volume mount to webserver container
   extraVolumeMounts:
     - name: dags-volume
@@ -346,6 +364,15 @@ webserver:
 
 # Apply the same GitHub sync configuration to workers
 workers:
+  # Resource limits to prevent OOMKilled
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  
   # Add volume mount to worker container
   extraVolumeMounts:
     - name: dags-volume
