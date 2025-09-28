@@ -131,16 +131,12 @@ spec:
         - name: env[4].value
           value: "${AWS_SECRET_ACCESS_KEY}"
         
-        # S3 log bucket
-        - name: env[7].value
-          value: "${S3_LOG_BUCKET}"
-        - name: config.logging.remote_base_log_folder
+        # S3 log bucket (correct index is env[8])
+        - name: env[8].value
           value: "${S3_LOG_BUCKET}"
         
-        # Fernet key
-        - name: env[9].value
-          value: "${FERNET_KEY}"
-        - name: config.core.fernet_key
+        # Fernet key (correct index is env[10])
+        - name: env[10].value
           value: "${FERNET_KEY}"
   destination:
     server: https://kubernetes.default.svc

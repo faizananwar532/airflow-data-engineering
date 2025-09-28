@@ -77,14 +77,30 @@ print_info "Creating/updating MySQL connection secrets..."
 # Ensure airflow namespace exists (ArgoCD will manage it, but secrets need to be created first)
 kubectl create namespace airflow --dry-run=client -o yaml | kubectl apply -f -
 
+# Extract MySQL connection details from environment variable or use default
+MYSQL_HOST="${MYSQL_HOST:-54.167.107.216}"
+MYSQL_PORT="${MYSQL_PORT:-3306}"
+MYSQL_USER="${MYSQL_USER:-myuser}"
+MYSQL_PASSWORD="${MYSQL_PASSWORD:-mypassword}"
+MYSQL_DATABASE="${MYSQL_DATABASE:-mydb}"
+
+# Build connection strings
+MYSQL_METADATA_CONN="mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DATABASE}"
+MYSQL_RESULT_CONN="db+mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DATABASE}"
+
+print_info "MySQL Configuration:"
+print_info "Host: ${MYSQL_HOST}:${MYSQL_PORT}"
+print_info "Database: ${MYSQL_DATABASE}"
+print_info "User: ${MYSQL_USER}"
+
 kubectl create secret generic airflow-mysql-metadata \
     --namespace airflow \
-    --from-literal=connection="mysql://myuser:mypassword@54.167.107.216:3306/mydb" \
+    --from-literal=connection="${MYSQL_METADATA_CONN}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl create secret generic airflow-mysql-result-backend \
     --namespace airflow \
-    --from-literal=connection="db+mysql://myuser:mypassword@54.167.107.216:3306/mydb" \
+    --from-literal=connection="${MYSQL_RESULT_CONN}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
 print_status "MySQL connection secrets created/updated"
